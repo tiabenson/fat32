@@ -15,31 +15,34 @@
 #define MAX_COMMAND_SIZE 255    // The maximum command-line size
 #define MAX_NUM_ARGUMENTS 5     // Mav shell only supports five arguments
 
+//infrormation for image
 uint16_t BPB_BytesPerSec;
 uint8_t BPB_SecPerClus;
 uint16_t BPB_RsvdSecCnt;
 uint8_t BPB_NumFATS;
+uint16_t BPB_RootEntCnt;
 uint32_t BPB_FATSz32;
 
 struct __attribute__((__packed__)) DirEntry
 {
     char Dir_Name[11];
     uint8_t Dir_Attr;
-    uint8_t Unused1[0];
+    uint8_t Unused1[8];
     uint16_t Dir_FirstClusterHigh;
     uint16_t Dir_FirstClusterLow;
     uint8_t Unused[4];
     uint32_t Dir_FileSize;
 };
 
-FILE *file; //opens .img file
-
+struct DirEntry directory[16];
+FILE *file;
 
 int main()
 {
     char * cmd_str = (char*) malloc( MAX_COMMAND_SIZE );
     int count = 0;  //checks if file is open
     int close = 0;  //checks if any commands are entered after a close
+    int root = 0;
     
     while(1)
     {
@@ -104,20 +107,21 @@ int main()
                 
                 if(count == 1)  //if file has already been opened without being closed
                 {
-                    printf("Error: File system image already open.");
+                    printf("Error: File system image already open.\n");
                 }
                 
                 else    //after checking possible errors, open file
                 {
                     file = fopen(token[1], "r");
                     count = 1;
+                    close = 0;  //file hasn't been closed
                     
                     if(!file)   //check if file is ok
                     {
                         printf("Error: File system image not found.");
                     }
                     
-                    //retrieve the bytes per sec, sector per cluster, and reserved sector count
+                    //retrieve the bytes per sec, sector per cluster, reserved sector count, etc. from image
                     fseek(file, 11, SEEK_SET);
                     fread(&BPB_BytesPerSec, 2, 1, file);
                     
@@ -127,34 +131,95 @@ int main()
                     fseek(file, 14, SEEK_SET);
                     fread(&BPB_RsvdSecCnt, 2, 1, file);
                     
-                    printf("Bytes per sec is: %d\n", BPB_BytesPerSec);
-                    printf("Sector per clus is: %d\n", BPB_SecPerClus);
-                    printf("Reserved sec count is : %d\n", BPB_RsvdSecCnt);
+                    fseek(file, 16, SEEK_SET);
+                    fread(&BPB_NumFATS, 1, 1, file);
+                    
+                    fseek(file, 17, SEEK_SET);
+                    fread(&BPB_RootEntCnt, 2, 1, file);
+                    
+                    fseek(file, 36, SEEK_SET);
+                    fread(&BPB_FATSz32, 4, 1, file);
+                    
+                    root = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+                    
                 }
-                
-                
             }
             
             else
             {
-                printf("Error: Can't open a non-image file!\n");
+                printf("Error: File system image not found.\n");
             }
             
         }
         
-        else if (strcmp(token[0], "close") == 0)
+        else if(strcmp(token[0], "close") == 0) //close the file
         {
             if(count == 0)  //if file isn't open
             {
-                printf("Error: File system not open.");
+                printf("Error: File system not open.\n");
             }
             
             else
             {
                 fclose(file);
                 count = 0;
-                close = 1;
+                close = 1;  //no commands can execute after file has been closed
             }
+        }
+        
+        else if(strcmp(token[0], "info") == 0)  //print info
+        {
+            if(close == 1)  //check if file isn't open
+            {
+                printf("Error: File system image must be opened first.\n");
+                continue;
+            }
+            
+            printf("BytesPerSec (base 10): %d\n", BPB_BytesPerSec);
+            printf("BytesPerSec (hex): %x\n", BPB_BytesPerSec);
+            
+            printf("SecPerClus (base 10): %d\n", BPB_SecPerClus);
+            printf("SecPerClus (hex): %x\n", BPB_SecPerClus);
+            
+            printf("RsvdSecCnt (base 10): %d\n", BPB_RsvdSecCnt);
+            printf("RsvdSecCnt (hex): %x\n", BPB_RsvdSecCnt);
+            
+            printf("NumFATS (base 10): %d\n", BPB_NumFATS);
+            printf("NumFATS (hex): %x\n", BPB_NumFATS);
+            
+            printf("FATSz32 (base 10): %d\n", BPB_FATSz32);
+            printf("FATSz32 (hex): %x\n", BPB_FATSz32);
+ 
+        }
+        
+        else if (strcmp(token[0], "ls") == 0)   //show files in directory
+        {
+            if(close == 1)  //check if file isn't open
+            {
+                printf("Error: File system image must be opened first.\n");
+            }
+            
+            else
+            {
+                fseek(file, root, SEEK_SET);
+                fread(&directory[0], 16, sizeof(struct DirEntry), file);
+                
+                int i;
+                
+                for(i = 0; i < 16; i++)
+                {
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
+                    {
+                        printf("%s\n", directory[i].Dir_Name);
+                    }
+                }
+            }
+            
+        }
+        
+        else
+        {
+            printf("Command not found.\n");
         }
         
         free(working_root);
