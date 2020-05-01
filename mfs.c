@@ -10,6 +10,8 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
+#include <ctype.h>
+#include <stdbool.h>
 
 #define WHITESPACE " \t\n"      //Whitespace will be delimiters for tokens
 #define MAX_COMMAND_SIZE 255    // The maximum command-line size
@@ -37,12 +39,54 @@ struct __attribute__((__packed__)) DirEntry
 struct DirEntry directory[16];
 FILE *file;
 
+int LBATToOffset(uint32_t sector)
+{
+    return ((sector - 2) * BPB_BytesPerSec) + (BPB_BytesPerSec * BPB_RsvdSecCnt) + (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec);
+}
+
+bool compare(char *fatName, char *userName)
+{
+    char expanded_name[12];
+    memset(expanded_name, ' ', 12 );
+    
+    char *token = strtok( userName, "." );
+    
+    strncpy(expanded_name, token, strlen(token));
+    
+    token = strtok( NULL, "." );
+    
+    if(token)
+    {
+        strncpy((char*)(expanded_name+8), token, strlen(token));
+    }
+    
+    expanded_name[11] = '\0';
+    
+    int i;
+    
+    for( i = 0; i < 11; i++ )
+    {
+        expanded_name[i] = toupper(expanded_name[i]);
+    }
+    
+    if(strncmp(expanded_name, fatName, 11) == 0)
+    {
+        return true;
+    }
+    
+    else
+    {
+        return false;
+    }
+}
+
 int main()
 {
     char * cmd_str = (char*) malloc( MAX_COMMAND_SIZE );
     int count = 0;  //checks if file is open
     int close = 0;  //checks if any commands are entered after a close
     int root = 0;
+    int i, a = 0;
     
     while(1)
     {
@@ -140,7 +184,11 @@ int main()
                     fseek(file, 36, SEEK_SET);
                     fread(&BPB_FATSz32, 4, 1, file);
                     
+                    //get root directory address
                     root = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
+                    
+                    fseek(file, root, SEEK_SET);
+                    fread(&directory[0], 16, sizeof(struct DirEntry), file);
                     
                 }
             }
@@ -189,10 +237,9 @@ int main()
             
             printf("FATSz32 (base 10): %d\n", BPB_FATSz32);
             printf("FATSz32 (hex): %x\n", BPB_FATSz32);
- 
         }
         
-        else if (strcmp(token[0], "ls") == 0)   //show files in directory
+        else if(strcmp(token[0], "ls") == 0)   //show files in directory
         {
             if(close == 1)  //check if file isn't open
             {
@@ -201,20 +248,97 @@ int main()
             
             else
             {
-                fseek(file, root, SEEK_SET);
-                fread(&directory[0], 16, sizeof(struct DirEntry), file);
-                
-                int i;
-                
                 for(i = 0; i < 16; i++)
                 {
                     if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
                     {
-                        printf("%s\n", directory[i].Dir_Name);
+                        char names[12];
+                        memset(names, 0, 12);
+                        strncpy(names, directory[i].Dir_Name, 11);
+                        printf("%s\n", names);
                     }
                 }
             }
             
+        }
+        
+        else if(strcmp(token[0], "stat") == 0)
+        {
+            for(i = 0; i < 16; i++)
+            {
+                if(compare(directory[i].Dir_Name, token[1]) == true)
+                {
+                    char names[12];
+                    memset(names, 0, 12);
+                    strncpy(names, directory[i].Dir_Name, 11);
+                    
+                    printf("Name: %s\n", names);
+                    printf("Attribute (hex): %x\n", directory[i].Dir_Attr);
+                    printf("Size (decimal): %d\n", directory[i].Dir_FileSize);
+                    printf("First cluster low (hex): %x\n", directory[i].Dir_FirstClusterLow);
+                }
+            }
+        }
+        
+        else if(strcmp(token[0], "cd") == 0)
+        {
+            bool check = false;
+            char *dir;
+            
+            if(close == 1)  //check if file isn't open
+            {
+                printf("Error: File system image must be opened first.\n");
+                continue;
+            }
+
+            if(token[1] == NULL)
+            {
+                printf("Error: Didn't specify directory to cd into\n");
+                continue;
+            }
+            
+            strcpy(dir, token[1]);
+            
+            if(strstr(dir, "/"))
+            {
+                dir = strtok(token[1], "/");
+            }
+            
+            if(strcmp(dir, "..") == 0)
+            {
+                for (i = 0; i < 16; i++)
+                {
+                    if(strstr(directory[i].Dir_Name, dir) != NULL)
+                    {
+                        if(directory[i].Dir_FirstClusterLow == 0)
+                        {
+                            directory[i].Dir_FirstClusterLow = 2;
+                        }
+                        
+                        fseek(file, LBATToOffset(directory[i].Dir_FirstClusterLow), SEEK_SET);
+                        
+                        fread(&directory[0], 16, sizeof(struct DirEntry), file);
+                        break;
+                    }
+                    
+                    else
+                    {
+                        for(i = 0; i < 16; i++)
+                        {
+                            if(compare(directory[i].Dir_Name, dir) == true)
+                            {
+                                fseek(file, LBATToOffset(directory[i].Dir_FirstClusterLow), SEEK_SET);
+                                
+                                fread(&directory[0], 16, sizeof(struct DirEntry), file);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+            }
+     
+        
         }
         
         else
