@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
@@ -24,7 +25,6 @@ uint16_t BPB_RsvdSecCnt;
 uint8_t BPB_NumFATS;
 uint16_t BPB_RootEntCnt;
 uint32_t BPB_FATSz32;
-int offset = 0;
 
 struct __attribute__((__packed__)) DirEntry
 {
@@ -39,6 +39,8 @@ struct __attribute__((__packed__)) DirEntry
 
 struct DirEntry directory[16];
 FILE *file;
+int root = 0;
+int offset = 0;
 
 int LBATToOffset(uint32_t sector)
 {
@@ -95,8 +97,9 @@ int main()
     char * cmd_str = (char*) malloc( MAX_COMMAND_SIZE );
     int count = 0;  //checks if file is open
     int close = 0;  //checks if any commands are entered after a close
-    int root = 0;
+    
     int i, a, j = 0;
+    int folder = 0;
     
     while(1)
     {
@@ -261,9 +264,17 @@ int main()
             {
                 printf("Error: File system image must be opened first.\n");
             }
-            
+          
             else
             {
+                if(folder == 1)
+                {
+                    
+                    fseek(file, offset, SEEK_SET);
+                    fread(&directory[0], 16, sizeof(struct DirEntry), file);
+                    
+                }
+                
                 for(i = 0; i < 16; i++)
                 {
                     if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
@@ -306,9 +317,9 @@ int main()
                     {
                         here = true;
                         printf("Name: %s\n", names);
-                        printf("Attribute (decimal): %d\n", directory[i].Dir_Attr);
-                        printf("Size (decimal): %d\n", directory[i].Dir_FileSize);
-                        printf("First cluster low (decimal): %d\n", directory[i].Dir_FirstClusterLow);
+                        printf("Attribute: %d\n", directory[i].Dir_Attr);
+                        printf("Size: %d\n", directory[i].Dir_FileSize);
+                        printf("First cluster low: %d\n", directory[i].Dir_FirstClusterLow);
                     }
             
                 }
@@ -346,14 +357,19 @@ int main()
                 if(compare(directory[i].Dir_Name, names) == true && directory[i].Dir_Attr == 0x10)
                 {
                         here = true;
+                    
+                        offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
+                    
                        
-                        fseek(file, LBATToOffset(directory[i].Dir_FirstClusterLow), SEEK_SET);
+                        fseek(file, offset, SEEK_SET);
                         fread(&directory[0], 16, sizeof(struct DirEntry), file);
-                        break;
+                    folder = 1;
                     
                 }
               
             }
+       
+       
           
             if (!here)
             {
@@ -388,28 +404,24 @@ int main()
                 {
                     if(compare(directory[i].Dir_Name, names) == true)
                     {
-                        int position = atoi(token[2]);
+                        int pos = atoi(token[2]);
                         int bytes = atoi(token[3]);
-                        
-                        char read[bytes];
-                        int info[bytes];
 
                         offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
-                        fseek(file, offset + position, SEEK_SET);
+                        fseek(file, offset + pos, SEEK_SET);
 
-                        for(j = 0; j < bytes; j++)
+                        for(a = 0; a < bytes; a++)
                         {
                             fread(&val, bytes, 1, file);
                             printf("%d ", val);
                         }
 
-                        
-                        
                     }
                 }
-                
-                
+        
             }
+            
+            printf("/n");
         }
         
         else
