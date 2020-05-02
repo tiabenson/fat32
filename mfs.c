@@ -24,6 +24,7 @@ uint16_t BPB_RsvdSecCnt;
 uint8_t BPB_NumFATS;
 uint16_t BPB_RootEntCnt;
 uint32_t BPB_FATSz32;
+int offset = 0;
 
 struct __attribute__((__packed__)) DirEntry
 {
@@ -73,7 +74,7 @@ bool compare(char *fatName, char *userName)
     
     int i;
     
-    for( i = 0; i < 11; i++ )
+    for(i = 0; i < 11; i++ )
     {
         expanded_name[i] = toupper(expanded_name[i]);
     }
@@ -95,7 +96,7 @@ int main()
     int count = 0;  //checks if file is open
     int close = 0;  //checks if any commands are entered after a close
     int root = 0;
-    int i, a = 0;
+    int i, a, j = 0;
     
     while(1)
     {
@@ -265,9 +266,9 @@ int main()
             {
                 for(i = 0; i < 16; i++)
                 {
-                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20)
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
                     {
-                        char names[12];
+                        char names[12];     //make files null terminated
                         memset(names, 0, 12);
                         strncpy(names, directory[i].Dir_Name, 11);
                         printf("%s\n", names);
@@ -322,8 +323,7 @@ int main()
         
         else if(strcmp(token[0], "cd") == 0)
         {
-            bool check = false;
-            char *dir;
+            bool here = false;
             
             if(close == 1)  //check if file isn't open
             {
@@ -331,54 +331,85 @@ int main()
                 continue;
             }
 
-            if(token[1] == NULL)
+            if(token[1] == NULL)    //check if 2nd parameter is used
             {
                 printf("Error: Didn't specify directory to cd into\n");
                 continue;
             }
-            
-            strcpy(dir, token[1]);
-            
-            if(strstr(dir, "/"))
+      
+            for(i = 0; i < 16; i++)
             {
-                dir = strtok(token[1], "/");
-            }
-            
-            if(strcmp(dir, "..") == 0)
-            {
-                for (i = 0; i < 16; i++)
+                char names[12];
+                memset(names, 0, 12);
+                strncpy(names, token[1], 11);
+                
+                if(compare(directory[i].Dir_Name, names) == true && directory[i].Dir_Attr == 0x10)
                 {
-                    if(strstr(directory[i].Dir_Name, dir) != NULL)
-                    {
-                        if(directory[i].Dir_FirstClusterLow == 0)
-                        {
-                            directory[i].Dir_FirstClusterLow = 2;
-                        }
-                        
+                        here = true;
+                       
                         fseek(file, LBATToOffset(directory[i].Dir_FirstClusterLow), SEEK_SET);
-                        
                         fread(&directory[0], 16, sizeof(struct DirEntry), file);
                         break;
-                    }
                     
-                    else
+                }
+              
+            }
+          
+            if (!here)
+            {
+                printf("Error: Can't cd into a file.\n");
+            }
+       
+        }
+        
+        else if(strcmp(token[0], "read") == 0)
+        {
+            uint8_t val;
+            
+            if(close == 1)  //check if file isn't open
+            {
+                printf("Error: File system image must be opened first.\n");
+                continue;
+            }
+            
+            if(token[1] == NULL || token[2] == NULL || token[3] == NULL)
+            {
+                printf("Error: too few arguments.\n");
+                continue;
+            }
+            
+            for(i = 0; i < 16; i++)
+            {
+                char names[12];
+                memset(names, 0, 12);
+                strncpy(names, token[1], 11);
+                
+                if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x20)
+                {
+                    if(compare(directory[i].Dir_Name, names) == true)
                     {
-                        for(i = 0; i < 16; i++)
+                        int position = atoi(token[2]);
+                        int bytes = atoi(token[3]);
+                        
+                        char read[bytes];
+                        int info[bytes];
+
+                        offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
+                        fseek(file, offset + position, SEEK_SET);
+
+                        for(j = 0; j < bytes; j++)
                         {
-                            if(compare(directory[i].Dir_Name, dir) == true)
-                            {
-                                fseek(file, LBATToOffset(directory[i].Dir_FirstClusterLow), SEEK_SET);
-                                
-                                fread(&directory[0], 16, sizeof(struct DirEntry), file);
-                                break;
-                            }
+                            fread(&val, bytes, 1, file);
+                            printf("%d ", val);
                         }
+
+                        
+                        
                     }
                 }
                 
+                
             }
-     
-        
         }
         
         else
