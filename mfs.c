@@ -44,6 +44,15 @@ int LBATToOffset(uint32_t sector)
     return ((sector - 2) * BPB_BytesPerSec) + (BPB_BytesPerSec * BPB_RsvdSecCnt) + (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec);
 }
 
+int16_t NextLB(uint32_t sector)
+{
+    uint32_t FATAddress = (BPB_BytesPerSec * BPB_RsvdSecCnt) + (sector * 4);
+    int16_t val;
+    fseek(file, FATAddress, SEEK_SET);
+    fread(&val, 2, 1, file);
+    return val;
+}
+
 bool compare(char *fatName, char *userName)
 {
     char expanded_name[12];
@@ -137,6 +146,12 @@ int main()
         
         else if(strcmp(token[0], "open") == 0)
         {
+            if(token[1] == NULL)
+            {
+                printf("Error: No image specified.\n");
+                continue;
+            }
+            
             char *img = ".img";
             char *checkIfImage = strstr(token[1], img);
             
@@ -145,7 +160,7 @@ int main()
             {
                 if(strlen(token[1]) > 100 && strchr(token[1], ' ') != NULL) //check if .img file is in correct format
                 {
-                    printf("Error: .img filename not in correct format! Maybe try again.");
+                    printf("Error: .img filename not in correct format! Maybe try again.\n");
                     continue;
                 }
                 
@@ -162,7 +177,7 @@ int main()
                     
                     if(!file)   //check if file is ok
                     {
-                        printf("Error: File system image not found.");
+                        printf("Error: File system image not found.\n");
                     }
                     
                     //retrieve the bytes per sec, sector per cluster, reserved sector count, etc. from image
@@ -184,6 +199,7 @@ int main()
                     fseek(file, 36, SEEK_SET);
                     fread(&BPB_FATSz32, 4, 1, file);
                     
+                    
                     //get root directory address
                     root = (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec) + (BPB_RsvdSecCnt * BPB_BytesPerSec);
                     
@@ -197,7 +213,6 @@ int main()
             {
                 printf("Error: File system image not found.\n");
             }
-            
         }
         
         else if(strcmp(token[0], "close") == 0) //close the file
@@ -250,7 +265,7 @@ int main()
             {
                 for(i = 0; i < 16; i++)
                 {
-                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20)
                     {
                         char names[12];
                         memset(names, 0, 12);
@@ -262,21 +277,46 @@ int main()
             
         }
         
-        else if(strcmp(token[0], "stat") == 0)
+        else if(strcmp(token[0], "stat") == 0)  //print stats of file or directory
         {
+            if(close == 1)  //check if file isn't open
+            {
+                printf("Error: File system image must be opened first.\n");
+                continue;
+            }
+            
+            bool here = false;
+            
+            if(token[1] == NULL)
+            {
+                printf("Error: Didn't state what file or directory to stat.\n");
+                continue;
+            }
+            
             for(i = 0; i < 16; i++)
             {
-                if(compare(directory[i].Dir_Name, token[1]) == true)
+                char names[12];
+                memset(names, 0, 12);
+                strncpy(names, token[1], 11);
+                
+                if(compare(directory[i].Dir_Name, names) == true)
                 {
-                    char names[12];
-                    memset(names, 0, 12);
-                    strncpy(names, directory[i].Dir_Name, 11);
-                    
-                    printf("Name: %s\n", names);
-                    printf("Attribute (hex): %x\n", directory[i].Dir_Attr);
-                    printf("Size (decimal): %d\n", directory[i].Dir_FileSize);
-                    printf("First cluster low (hex): %x\n", directory[i].Dir_FirstClusterLow);
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20)
+                    {
+                        here = true;
+                        printf("Name: %s\n", names);
+                        printf("Attribute (decimal): %d\n", directory[i].Dir_Attr);
+                        printf("Size (decimal): %d\n", directory[i].Dir_FileSize);
+                        printf("First cluster low (decimal): %d\n", directory[i].Dir_FirstClusterLow);
+                    }
+            
                 }
+       
+            }
+            
+            if (!here)
+            {
+                printf("Error: File not found.\n");
             }
         }
         
