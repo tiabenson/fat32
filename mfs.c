@@ -26,7 +26,7 @@ uint8_t BPB_NumFATS;
 uint16_t BPB_RootEntCnt;
 uint32_t BPB_FATSz32;
 
-struct __attribute__((__packed__)) DirEntry
+struct __attribute__((__packed__)) DirEntry //structure of image
 {
     char Dir_Name[11];
     uint8_t Dir_Attr;
@@ -39,24 +39,24 @@ struct __attribute__((__packed__)) DirEntry
 
 struct DirEntry directory[16];
 FILE *file;
-int root = 0;
-int offset = 0;
+int root;
 
-int LBATToOffset(uint32_t sector)
+int LBATToOffset(int32_t sector) //returns offset of sector
 {
     return ((sector - 2) * BPB_BytesPerSec) + (BPB_BytesPerSec * BPB_RsvdSecCnt) + (BPB_NumFATS * BPB_FATSz32 * BPB_BytesPerSec);
 }
 
-int16_t NextLB(uint32_t sector)
+int16_t NextLB(int32_t sector)
 {
     uint32_t FATAddress = (BPB_BytesPerSec * BPB_RsvdSecCnt) + (sector * 4);
     int16_t val;
     fseek(file, FATAddress, SEEK_SET);
     fread(&val, 2, 1, file);
+    
     return val;
 }
 
-bool compare(char *fatName, char *userName)
+bool compare(char *fatName, char *userName) //compares input with filename in FAT
 {
     char expanded_name[12];
     memset(expanded_name, ' ', 12 );
@@ -100,6 +100,7 @@ int main()
     
     int i, a, j = 0;
     int folder = 0;
+    int offset;
     
     while(1)
     {
@@ -265,20 +266,31 @@ int main()
                 printf("Error: File system image must be opened first.\n");
             }
           
-            else
+            else if(strcmp(token[1], "..") == 0)
             {
-                if(folder == 1)
-                {
-                    
-                    fseek(file, offset, SEEK_SET);
-                    fread(&directory[0], 16, sizeof(struct DirEntry), file);
-                    
-                }
+                fseek(file, root, SEEK_SET);
+                fread(&directory[0], 16, sizeof(struct DirEntry), file);
                 
-                for(i = 0; i < 16; i++)
+                for(i = 0; i < 16; i++) //print out files/folders in directory
                 {
                     if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
                     {
+                        
+                        char names[12];     //make files null terminated
+                        memset(names, 0, 12);
+                        strncpy(names, directory[i].Dir_Name, 11);
+                        printf("%s\n", names);
+                    }
+                }
+            }
+            
+            else
+            {
+                for(i = 0; i < 16; i++) //print out files/folders in directory
+                {
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
+                    {
+                        
                         char names[12];     //make files null terminated
                         memset(names, 0, 12);
                         strncpy(names, directory[i].Dir_Name, 11);
@@ -311,9 +323,9 @@ int main()
                 memset(names, 0, 12);
                 strncpy(names, token[1], 11);
                 
-                if(compare(directory[i].Dir_Name, names) == true)
+                if(compare(directory[i].Dir_Name, names) == true)   //print stats
                 {
-                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20)
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20 || directory[i].Dir_Attr == 0xe5)
                     {
                         here = true;
                         printf("Name: %s\n", names);
@@ -336,51 +348,49 @@ int main()
         {
             bool here = false;
             
+            
             if(close == 1)  //check if file isn't open
             {
                 printf("Error: File system image must be opened first.\n");
                 continue;
             }
 
-            if(token[1] == NULL)    //check if 2nd parameter is used
+            else if(token[1] == NULL)    //check if 2nd parameter is used
             {
                 printf("Error: Didn't specify directory to cd into\n");
                 continue;
             }
       
-            for(i = 0; i < 16; i++)
+            else
             {
-                char names[12];
-                memset(names, 0, 12);
-                strncpy(names, token[1], 11);
-                
-                if(compare(directory[i].Dir_Name, names) == true && directory[i].Dir_Attr == 0x10)
+                for(i = 0; i < 16; i++)
                 {
+                    if(compare(directory[i].Dir_Name, token[1]) == true && directory[i].Dir_Attr == 0x10)
+                    {
                         here = true;
-                    
+                        
                         offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
-                    
-                       
+                        
                         fseek(file, offset, SEEK_SET);
-                        fread(&directory[0], 16, sizeof(struct DirEntry), file);
-                    folder = 1;
+                        fread(&directory[0], 512, 1, file);
+                         folder = 1;
+                        
+                    }
                     
                 }
-              
+                
+                if (!here)
+                {
+                    printf("Error: Can't cd into a file.\n");
+                }
             }
-       
-       
-          
-            if (!here)
-            {
-                printf("Error: Can't cd into a file.\n");
-            }
+            
        
         }
         
-        else if(strcmp(token[0], "read") == 0)
+        else if(strcmp(token[0], "read") == 0)  //read certain bytes of files
         {
-            uint8_t val;
+            uint8_t value;
             
             if(close == 1)  //check if file isn't open
             {
@@ -388,40 +398,93 @@ int main()
                 continue;
             }
             
-            if(token[1] == NULL || token[2] == NULL || token[3] == NULL)
+            else if(token[1] == NULL || token[2] == NULL || token[3] == NULL)
             {
                 printf("Error: too few arguments.\n");
                 continue;
             }
             
-            for(i = 0; i < 16; i++)
+            else
             {
-                char names[12];
-                memset(names, 0, 12);
-                strncpy(names, token[1], 11);
-                
-                if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x20)
+                for(i = 0; i < 16; i++)
                 {
-                    if(compare(directory[i].Dir_Name, names) == true)
+                    char names[12];
+                    memset(names, 0, 12);
+                    strncpy(names, token[1], 11);
+                    
+                    if(directory[i].Dir_Attr == 0x01 || directory[i].Dir_Attr == 0x10 || directory[i].Dir_Attr == 0x20)
                     {
-                        int pos = atoi(token[2]);
-                        int bytes = atoi(token[3]);
-
-                        offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
-                        fseek(file, offset + pos, SEEK_SET);
-
-                        for(a = 0; a < bytes; a++)
+                        if(compare(directory[i].Dir_Name, names) == true)   //read bytes from certain position
                         {
-                            fread(&val, bytes, 1, file);
-                            printf("%d ", val);
+                            int pos = atoi(token[2]);
+                            int bytes = atoi(token[3]);
+                            
+                            offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
+                            fseek(file, offset + pos, SEEK_SET);
+                            
+                            for(a = 0; a < bytes; a++)
+                            {
+                                fread(&value, bytes, 1, file);
+                                printf("%d ", value);
+                            }
+                            
                         }
-
                     }
+                    
                 }
-        
+                
+                printf("\n");
             }
             
-            printf("/n");
+            
+        }
+        
+        else if(strcmp(token[0], "get") == 0)
+        {
+            if(close == 1)  //check if file isn't open
+            {
+                printf("Error: File system image must be opened first.\n");
+                continue;
+            }
+            
+            else if(token[1] == NULL)
+            {
+                printf("Error: Too few parameters");
+                continue;
+            }
+            
+            else
+            {
+                
+                bool write = false;
+                
+                for(i = 0; i < 16; i++)
+                {
+                    char names[12];
+                    memset(names, 0, 12);
+                    strncpy(names, token[1], 11);
+                    int file_size;
+                    FILE *get;
+                    
+                    if(compare(directory[i].Dir_Name, names) == true)
+                    {
+                        file_size = directory[i].Dir_FileSize;
+                        offset = LBATToOffset(directory[i].Dir_FirstClusterLow);
+                        char File[file_size];
+                        
+                        fseek(file, offset, SEEK_SET);
+                        get = fopen(token[1], "w");
+                        
+                        fread(&File[0], file_size, 1, file);
+                        fwrite(&File[0], file_size, 1, get);
+                        fclose(get);
+                        
+                        write = true;
+                    }
+                }
+
+            }
+        
         }
         
         else
