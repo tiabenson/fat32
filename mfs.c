@@ -3,12 +3,12 @@
 
 #define _GNU_SOURCE
 
-#include <ctype.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <ctype.h>
 #include <string.h>
 #include <signal.h>
 #include <stdint.h>
@@ -45,7 +45,6 @@ int8_t BPB_NumFATs; // The count of FAT data structures on the volume.
 int16_t BPB_RootEntCnt;
 int32_t BPB_FATSz32; // 32-bit count of sectors occupied by ONE FAT.
 
-
 bool compare(char* Fatname, char* input)    //compares fat name with user imput name
 {
     char expanded_name[12];
@@ -71,7 +70,7 @@ bool compare(char* Fatname, char* input)    //compares fat name with user imput 
         expanded_name[i] = toupper(expanded_name[i] );
     }
     
-    if( strncmp(expanded_name, Fatname, 11 ) == 0)
+    if(strncmp(expanded_name, Fatname, 11) == 0)
     {
         return true;
     }
@@ -232,14 +231,13 @@ int main()
             if(count == 0)  //if file isn't open
             {
                 printf("Error: File system not open.\n");
+                continue;
             }
             
-            else
-            {
-                count = 0;
-                close = 1;  //no commands can execute after file has been closed
-                fclose(file);
-            }
+            count = 0;
+            close = 1;  //no commands can execute after file has been closed
+            fclose(file);
+            
         }
         
         else if(strcmp(token[0], "info") == 0)  //print info
@@ -269,7 +267,7 @@ int main()
         }
         
         
-        else if (strcmp(token[0], "ls") == 0)   //show what's in directory
+        else if(strcmp(token[0], "ls") == 0)   //show what's in directory
         {
             if(close == 1)  //check if file isn't open
             {
@@ -329,7 +327,7 @@ int main()
         
         else if(strcmp(token[0], "cd") == 0)   //change into different directory
         {
-            bool here = false;
+            bool here = false;  //checks if directory was found
             int offset = 0;
             char *dir = strtok(token[1], "/");
             
@@ -347,7 +345,6 @@ int main()
             
             else    //cd into directory
             {
-                
                 if(strcmp("..", token[1]) != 0)  //if .. wasn't typed, treat as a folder
                 {
                     for(i = 0; i < 16; i++)
@@ -373,9 +370,7 @@ int main()
                             // Check if .. was read as 0, change to 2 if necessary
                             if (directory[i].DIR_FirstClusterLow == 0)
                             {
-                                directory[i].DIR_FirstClusterLow = 2;
-                                
-                                offset = LBATToOffset(directory[i].DIR_FirstClusterLow);
+                                offset = LBATToOffset(2);
                                 fseek(file, offset, SEEK_SET);
                                 fread(&directory[0], sizeof(struct DirEntry), 16, file);
                             }
@@ -420,9 +415,7 @@ int main()
                                 // Check if .. was read as 0, change to 2 if necessary
                                 if (directory[i].DIR_FirstClusterLow == 0)
                                 {
-                                    directory[i].DIR_FirstClusterLow = 2;
-                                    
-                                    offset = LBATToOffset(directory[i].DIR_FirstClusterLow);
+                                    offset = LBATToOffset(2);
                                     fseek(file, offset, SEEK_SET);
                                     fread(&directory[0], sizeof(struct DirEntry), 16, file);
                                 }
@@ -448,20 +441,18 @@ int main()
             
         }
         
-        else if(strcmp(token[0], "read") == 0)
+        else if(strcmp(token[0], "read") == 0)  //read certain bytes of a file
         {
             bool here = false;
             
             if(close == 1)  //check if file isn't open
             {
                 printf("Error: File system image must be opened first.\n");
-                continue;
             }
             
             else if(token[1] == NULL || token[2] == NULL || token[3] == NULL)
             {
                 printf("Error: too few arguments.\n");
-                continue;
             }
             
             else
@@ -489,7 +480,7 @@ int main()
                             for(a = 0; a < length; a++)
                             {
                                 fread(&value, 1, 1, file);
-                                printf("%d ", value);
+                                printf("%x ", value);
                             }
                             
                             here = true;
@@ -508,10 +499,10 @@ int main()
             }
         }
         
-        else if(strcmp(token[0], "get") == 0)   //copy file in fat to your directory
+        else if(strcmp(token[0], "get") == 0)   //copy file in FAT to your directory
         {
             FILE *get;  //used to fwrite
-            bool write = false;
+            bool write = false; //check is write was successful
             
             if(close == 1)  //check if file isn't open
             {
@@ -552,9 +543,14 @@ int main()
                 
             }
             
-            if(write)
+            if(write)   //close file if written to successfully
             {
                 fclose(get);
+            }
+            
+            else
+            {
+                printf("Error: File not found.\n");
             }
         }
         
