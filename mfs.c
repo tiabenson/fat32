@@ -432,7 +432,7 @@ int main()
                         }
                     }
                     
-                    dir = strtok(NULL, "/");
+                    dir = strtok(NULL, "/");    //keep delimitinig by /
                 }
                 
                 if (!here)
@@ -452,7 +452,7 @@ int main()
                 printf("Error: File system image must be opened first.\n");
             }
             
-            else if(token[1] == NULL || token[2] == NULL || token[3] == NULL)
+            else if(token[1] == NULL || token[2] == NULL || token[3] == NULL)   //check if user typed enough arguments
             {
                 printf("Error: too few arguments.\n");
             }
@@ -481,7 +481,7 @@ int main()
                             fseek(file, offset, SEEK_SET);  //get offset, then seek to given position and stay there
                             fseek(file, pos, SEEK_CUR);
                             
-                            for(j = 0; j < length; j++)
+                            for(j = 0; j < length; j++) //initialize value array
                             {
                                 values[j] = 0;
                             }
@@ -492,7 +492,7 @@ int main()
                                 values[a] = data;
                             }
                             
-                            for(j = 0; j < length; j++)
+                            for(j = 0; j < length; j++) //print hex values
                             {
                                 printf("%x ", values[j]);
                             }
