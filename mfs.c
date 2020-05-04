@@ -14,7 +14,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define WHITESPACE " \t\n"      // command line will be delimted by whitespace
+#define WHITESPACE " \t\n"      //command line will be delimted by whitespace
 
 #define MAX_COMMAND_SIZE 255
 
@@ -41,9 +41,9 @@ struct DirEntry directory[16];
 int16_t BPB_BytesPerSec;
 int8_t BPB_SecPerClus;
 int16_t BPB_RsvdSecCnt;
-int8_t BPB_NumFATs; // The count of FAT data structures on the volume.
+int8_t BPB_NumFATs;
 int16_t BPB_RootEntCnt;
-int32_t BPB_FATSz32; // 32-bit count of sectors occupied by ONE FAT.
+int32_t BPB_FATSz32;
 
 bool compare(char* Fatname, char* input)    //compares fat name with user imput name
 {
@@ -148,8 +148,7 @@ int main()
             token_count++;
         }
         
-        
-        if (strcmp(token[0], "exit") == 0 || strcmp(token[0], "quit") == 0)
+        if(strcmp(token[0], "exit") == 0 || strcmp(token[0], "quit") == 0)
         {
             exit(0);
         }
@@ -266,7 +265,6 @@ int main()
             }
         }
         
-        
         else if(strcmp(token[0], "ls") == 0)   //show what's in directory
         {
             if(close == 1)  //check if file isn't open
@@ -280,7 +278,7 @@ int main()
                 //don't show deleted files (0xe5), so check 1st character of the filename
                 if((directory[i].DIR_Attr == 0x01 || directory[i].DIR_Attr == 0x10 || directory[i].DIR_Attr == 0x20) && (directory[i].DIR_Name[0] != (char) 0xe5))
                 {
-                    char name[12];
+                    char name[12];  //Show files as null terminated
                     memset(&name, 0, 12);
                     strncpy(name, directory[i].DIR_Name, 11);
                     printf("%s\n", name);
@@ -329,7 +327,7 @@ int main()
         {
             bool here = false;  //checks if directory was found
             int offset = 0;
-            char *dir = strtok(token[1], "/");
+            char *dir = strtok(token[1], "/");  //delimit by /
             
             if(close == 1)  //check if file isn't open
             {
@@ -372,14 +370,14 @@ int main()
                             {
                                 offset = LBATToOffset(2);
                                 fseek(file, offset, SEEK_SET);
-                                fread(&directory[0], sizeof(struct DirEntry), 16, file);
+                                fread(&directory[0], 16, sizeof(struct DirEntry), file);
                             }
                             
                             else
                             {
                                 offset = LBATToOffset(directory[i].DIR_FirstClusterLow);
                                 fseek(file, offset, SEEK_SET);
-                                fread(&directory[0], sizeof(struct DirEntry), 16, file);
+                                fread(&directory[0], 16, sizeof(struct DirEntry), file);
                             }
                             
                             
@@ -388,7 +386,9 @@ int main()
                     }
                 }
                 
-                while((dir = strtok(NULL, "/")))    //continue cd until there's no more slashes
+                dir = strtok(NULL, "/");
+                
+                while(dir)    //continue cd until there's no more slashes
                 {
                     if(strcmp("..", dir) != 0)  //if .. wasn't typed, treat as a folder
                     {
@@ -417,20 +417,22 @@ int main()
                                 {
                                     offset = LBATToOffset(2);
                                     fseek(file, offset, SEEK_SET);
-                                    fread(&directory[0], sizeof(struct DirEntry), 16, file);
+                                    fread(&directory[0], 16, sizeof(struct DirEntry), file);
                                 }
                                 
                                 else
                                 {
                                     offset = LBATToOffset(directory[i].DIR_FirstClusterLow);
                                     fseek(file, offset, SEEK_SET);
-                                    fread(&directory[0], sizeof(struct DirEntry), 16, file);
+                                    fread(&directory[0], 16, sizeof(struct DirEntry), file);
                                 }
                                 
                                 here = true;
                             }
                         }
                     }
+                    
+                    dir = strtok(NULL, "/");
                 }
                 
                 if (!here)
@@ -463,7 +465,7 @@ int main()
                     memset(names, 0, 12);
                     strncpy(names, token[1], 11);
                     int offset = 0;
-                    int value = 0;
+                    int data = 0;
                     
                     //check if a acceptable file
                     if(directory[i].DIR_Attr == 0x01 || directory[i].DIR_Attr == 0x10 || directory[i].DIR_Attr == 0x20)
@@ -473,14 +475,26 @@ int main()
                             int bytes = atoi(token[3]);
                             int length = bytes;
                             int pos = atoi(token[2]);
-                            
+                            int values[length]; //array will hold all data
+                        
                             offset = LBATToOffset(directory[i].DIR_FirstClusterLow);
-                            fseek(file, offset + pos, SEEK_SET);
+                            fseek(file, offset, SEEK_SET);  //get offset, then seek to given position and stay there
+                            fseek(file, pos, SEEK_CUR);
                             
-                            for(a = 0; a < length; a++)
+                            for(j = 0; j < length; j++)
                             {
-                                fread(&value, 1, 1, file);
-                                printf("%x ", value);
+                                values[j] = 0;
+                            }
+                            
+                            for(a = 0; a < length; a++) //save all data in array
+                            {
+                                fread(&data, 1, 1, file);
+                                values[a] = data;
+                            }
+                            
+                            for(j = 0; j < length; j++)
+                            {
+                                printf("%x ", values[j]);
                             }
                             
                             here = true;
@@ -490,9 +504,9 @@ int main()
                     
                 }
                 
-                if(!here)
+                if(!here)   //if error occurred
                 {
-                    printf("Error: Can't read a directory. Please enter a filename.\n");
+                    printf("Error with read function. Try again.");
                 }
                 
                 printf("\n");
@@ -527,14 +541,15 @@ int main()
                     
                     if(compare(directory[i].DIR_Name, names) == true)
                     {
-                        file_size = directory[i].DIR_FileSize;  //get file size and cluster
                         offset = LBATToOffset(directory[i].DIR_FirstClusterLow);
-                        char File[file_size];
+                        file_size = directory[i].DIR_FileSize;  //get file size and offset
+                        
+                        char File[file_size];   //read data to this array
                         
                         fseek(file, offset, SEEK_SET);
                         fread(&File[0], file_size, 1, file);
                         
-                        get = fopen(token[1], "w");
+                        get = fopen(token[1], "w"); //create new file and write to it
                         fwrite(&File[0], file_size, 1, get);
                         
                         write = true;
