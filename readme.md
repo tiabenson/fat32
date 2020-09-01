@@ -1,6 +1,6 @@
 # FAT32 Image Reader
 This program reads a FAT32 image file and performs operations. <br/><br/>The operations supported are: 
-<br/>1. **open (filename):** opens FAT32 file
+<br/>1. **open (filename):** opens FAT32 image
 <br/>2. **close:** closes FAT32 file
 <br/>3. **info:** displays bytes per second, sector per cluster, reserved sector count, numFATS, and FATSz32
 <br/>4. **ls:** shows all files in current directory
